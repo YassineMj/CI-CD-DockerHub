@@ -7,7 +7,7 @@ COPY src ./src
 RUN mvn clean package -DskipTests
 
 # -------- Étape 2 : Image exécutable --------
-FROM eclipse-temurin:21-jre   # plus léger que jdk
+FROM eclipse-temurin:21-jdk
 WORKDIR /app
 COPY --from=builder /app/target/*.jar app.jar
 EXPOSE 8000
