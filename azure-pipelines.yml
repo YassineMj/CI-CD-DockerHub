@@ -1,0 +1,75 @@
+# 🔹 Définition du déclencheur de la pipeline
+trigger:
+  branches:
+    include:
+      - main   # La pipeline s’exécute automatiquement seulement sur la branche "main"
+
+# 🔹 Définition de l’agent qui exécutera la pipeline
+pool:
+  name: my-self-hosted-pool   # On utilise un agent self-hosted (installé sur ta machine locale)
+
+# 🔹 Déclaration des variables réutilisables dans la pipeline
+variables:
+  imageName: yassine580/my-app-ci   # Nom du repo DockerHub où les images seront pushées
+
+# 🔹 Début des étapes de la pipeline (stages)
+stages:
+  # =======================================================
+  # 1️⃣ Étape de Build
+  - stage: Build
+    displayName: "Build Docker Image"   # Nom lisible de l’étape
+    jobs:
+      - job: DockerBuild
+        steps:
+          # Étape 0 : Récupération du code source depuis Azure DevOps
+          - checkout: self
+
+          # Étape 1 : Build de l’image Docker
+          - task: Docker@2
+            displayName: "Build Docker image"
+            inputs:
+              command: build                 # On demande un "docker build"
+              dockerfile: 'dockerfile'  # Chemin vers ton Dockerfile
+              repository: $(imageName)       # Nom de l'image Docker
+              # Liste des tags associés
+              # Un tag unique basé sur l’ID du build (ex: 23)
+              # Le tag "latest" (version stable)
+              tags: |
+                $(Build.BuildId)
+                latest
+
+          # Étape 2 : Vérification rapide que l’image fonctionne
+          - script: |
+              docker run --rm $(imageName):$(Build.BuildId) echo "Build OK"
+            displayName: "Run quick check inside container"
+            # On lance le conteneur et affiche "Build OK".
+            # Si ça marche, ça veut dire que l’image est exécutable.
+
+  # =======================================================
+  # 2️⃣ Étape de Push (envoi sur DockerHub)
+  - stage: Push
+    displayName: "Push Docker Image"
+    dependsOn: Build   # Cette étape ne s’exécute qu’après un build réussi
+    jobs:
+      - job: DockerPush
+        steps:
+          # Étape 3 : Connexion à DockerHub via un service connection
+          - task: Docker@2
+            displayName: 'Login DockerHub'
+            inputs:
+              command: login
+              containerRegistry: 'dockerHubConnection'
+              # ⚠️ "dockerHubConnection" doit être créé dans Azure DevOps
+              # avec tes identifiants DockerHub
+
+          # Étape 4 : Push de l’image vers DockerHub
+          - task: Docker@2
+            displayName: 'Push Docker image'
+            inputs:
+              command: push
+              repository: $(imageName)
+              tags: |
+                $(Build.BuildId)
+                latest
+              # On envoie les 2 tags vers DockerHub
+              # Exemple : yassine580/my-app-ci:23 et yassine580/my-app-ci:latest
